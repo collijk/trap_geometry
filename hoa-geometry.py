@@ -1,67 +1,113 @@
 
-import xml.etree.cElementTree as ET
+import xml.etree.cElementTree as elementTree
 import re
 from matplotlib import pyplot as plt
 import numpy as np
 from svg.path import parse_path
 from functools import lru_cache
 
-it = ET.iterparse('resources/RS1096.svg')
-for _, el in it:
-    if '}' in el.tag:
-        el.tag = el.tag.split('}', 1)[1]  # strip all namespaces
-root = it.root
-parent_map = dict((c, p) for p in root.getiterator() for c in p)
+
+# Flags for printing the output to the console.
+PRINT_EXTRA_OUTPUT = False
+PRINT_ELECTRODES = False
+
+# Flags for logging output in data files.
+LOG_EXTRA_OUTPUT = False
+LOG_ELECTRODES = False
+
+# Create an iterator over the trap image file
+trap_XML_iterator = elementTree.iterparse('resources/RS1096.svg')
+# Strip all namespaces
+for _, element in trap_XML_iterator:
+    if '}' in element.tag:
+        element.tag = element.tag.split('}', 1)[1]
+# Grab the root node of the iterator
+root = trap_XML_iterator.root
+# Walk the XML tree, associating every child node with its immediate parent.
+parent_map = dict((child, parent) for parent in root.iter() for child in parent)
 
 
-def ancestor_has_transform(element):
-    current = element
-    while current in parent_map.keys():
-        if 'transform' in current.attrib.keys():
+def ancestor_has_transform(selected_element):
+    """Walks up the parent hierarchy for the selected element to determine if there is an associated transformation.
+
+    Arguments:
+    selected_element : Some xml element from the trap .svg file.
+
+    Returns:
+    Whether the selected element or one of its parents has the transform attribute.
+    """
+    # As long as the selected element has a parent
+    while selected_element in parent_map.keys():
+        # See if the selected element has the transform attribute.
+        if 'transform' in selected_element.attrib.keys():
+            # Stop and report true if we've found a parent with the transform attribute
             return True
-        current = parent_map[current]
+        # Otherwise take a step up the tree.
+        selected_element = parent_map[selected_element]
+    # Finally, if we hit the root element and haven't found the transform attribute, report false.
     return False
 
 
-def get_matrix(element):
-    """Recursive method, returns the net transformation matrix of a SVG element"""
-    matrix = np.matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    if 'transform' in element.attrib.keys():
-        matrix_text = element.attrib['transform']
-        matrix_values = [float(val) for val in re.findall(r'[-+]?[0-9]*\.?[0-9]+', matrix_text)]
-        if matrix_text.startswith('matrix'):
-            matrix = np.matrix([[matrix_values[0], matrix_values[2], matrix_values[4]],
-                                [matrix_values[1], matrix_values[3], matrix_values[5]],
+def get_matrix(selected_element):
+    """Recursive method to return the net transformation matrix of a SVG element
+
+    Arguments:
+    selected_element : The element to find the transformation matrix of.
+
+    Returns:
+    The net transformation matrix of the selected_element.
+    """
+    # Start with the identity representing no transformation.
+    matrix = np.eye(3)
+    # See if the selected matrix has the transform attribute.
+    if 'transform' in selected_element.attrib.keys():
+        # Get the string representation of the element transformation.
+        transform_string = selected_element.attrib['transform']
+        # Regular expression representing a float value
+        float_regex = r'[-+]?[0-9]*\.?[0-9]+'
+        # Create a converted list of floats for all the float values found in the transform_string
+        transform_values = [float(val) for val in re.findall(float_regex, transform_string)]
+
+        # The transformation is either a translation, a scaling, or some combination of the two.
+        if transform_string.startswith('translate'):
+            matrix = np.matrix([[1, 0, transform_values[0]],
+                                [0, 1, transform_values[1]],
                                 [0, 0, 1]])
-        if matrix_text.startswith('translate'):
-            matrix = np.matrix([[1, 0, matrix_values[0]],
-                                [0, 1, matrix_values[1]],
+        if transform_string.startswith('scale'):
+            matrix = np.matrix([[transform_values[0], 0, 0],
+                                [0, transform_values[1], 0],
                                 [0, 0, 1]])
-        if matrix_text.startswith('scale'):
-            matrix = np.matrix([[matrix_values[0], 0, 0],
-                                [0, matrix_values[1], 0],
+        if transform_string.startswith('matrix'):
+            matrix = np.matrix([[transform_values[0], transform_values[2], transform_values[4]],
+                                [transform_values[1], transform_values[3], transform_values[5]],
                                 [0, 0, 1]])
-    if ancestor_has_transform(element):
-        matrix = get_matrix(parent_map[element]) * matrix
+    # Check and see if any of the ancestors of our element also have the transformation property.
+    if ancestor_has_transform(selected_element):
+        # If so, get their combined transformation matrix and multiply it by the one for this element.
+        matrix = get_matrix(parent_map[selected_element]) * matrix
+
     return matrix
 
 
 class Patch(object):
-
-    def __init__(self, element):
-        self.element = element
-        self.id = element.attrib['id']
+    """
+    Represents a surface patch of an electrode. I think.
+    """
+    def __init__(self, selected_element):
+        self.element = selected_element
+        self.id = selected_element.attrib['id']
         self.matched = False
 
         self.color = '000000'
-        if 'style' in element.attrib:
-            style = element.attrib[ 'style' ]
-            match = re.search( r'stroke\s*:\s*#(?P<color>\w+)\s*;', style )
+        if 'style' in selected_element.attrib:
+            style = selected_element.attrib['style']
+            match = re.search(r'stroke\s*:\s*#(?P<color>\w+)\s*;', style)
             if match:
-                self.color = match.group( 'color' )
+                self.color = match.group('color')
         self.z = -4.5 if self.color == '0000ff' else 0.0
 
-        # print ('Creating patch for', self.id)
+        if PRINT_EXTRA_OUTPUT:
+            print('Creating patch for', self.id)
 
     def get_centroid(self):
         x, y = 0, 0
@@ -78,7 +124,7 @@ class Patch(object):
     def get_corners(self):
         transform = get_matrix(parent_map[self.element])
         corners = []
-        for p in parse_path( self.element.attrib['d']):
+        for p in parse_path(self.element.attrib['d']):
             coordinates = np.matrix([[1, 0, p.start.real], [0, 1, p.start.imag], [0, 0, 1]])
             res = transform*coordinates
             if len(corners):
@@ -89,7 +135,7 @@ class Patch(object):
             corners.append((res[0, 2], res[1, 2]))
         return corners
 
-    def get_boundaries( self, minx, maxx, miny, maxy):
+    def get_boundaries(self, minx, maxx, miny, maxy):
         corners = self.get_corners()
         prevx, prevy = corners[0]
         inside = minx < prevx < maxx and miny < prevy < maxy
@@ -112,10 +158,11 @@ class Electrode(object):
     def get_label_positions(self):
         label_positions = []
         for element in root.iterfind('.//tspan'):
-            if not element.text == self.name: continue
-            x = [float(num) for num in element.attrib['x'].split()] # values are for each letter
+            if not element.text == self.name:
+                continue
+            x = [float(num) for num in element.attrib['x'].split()]  # values are for each letter
             y = [float(num) for num in element.attrib['y'].split()]
-            x_avg, y_avg = sum(x)/len(x) , sum(y)/len(y)
+            x_avg, y_avg = sum(x)/len(x), sum(y)/len(y)
             final = get_matrix(parent_map[element]) * np.matrix([[1, 0, x_avg], [0, 1, y_avg], [0, 0, 1]])
             label_positions.append((final[0, 2], final[1, 2]))
         return label_positions

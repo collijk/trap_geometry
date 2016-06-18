@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
                 Converter converter;
 
                 CDTriangulation cdt;
-                ConstraintList constraints;
+                //ConstraintList constraints;
                 //std::transform( polygon.edges_begin(), polygon.edges_end(),
                 //std::back_inserter( constraints  ), converter );
                 //cdt.insert_constraints(
