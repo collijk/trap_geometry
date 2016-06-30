@@ -49,8 +49,10 @@ struct Electrode {
     std::vector<Triangle> triangles;
 };
 
-// WTF are argc and **argv?
+
 int main(int argc, char **argv) {
+
+
 
     std::vector<Electrode> electrodes;
 
@@ -60,10 +62,11 @@ int main(int argc, char **argv) {
     roi.push_back(Point_2(160 * 100 / 9., 75 * 100 / 9.));
     roi.push_back(Point_2(160 * 100 / 9., 140 * 100 / 9.));
 
+
     std::ifstream input(argv[1]);
     std::ofstream output(argv[2]);
-
     std::string name;
+
     while (input >> name) {
         electrodes.push_back(Electrode());
         Electrode &electrode = electrodes.back();

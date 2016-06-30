@@ -150,7 +150,7 @@ class Patch(object):
         """Calculates the distance between the centroid of this patch and any position."""
         centroid = self.get_centroid()
         # The third component of the centroid doesn't matter since we're using a 2d projection of the trap.
-        distance_vector = centroid[0:1]-position
+        distance_vector = centroid[0:2].T-position
         # Standard euclidean norm
         return np.sqrt(np.sum(np.square(distance_vector)))
 
@@ -230,7 +230,7 @@ class Electrode(object):
             # Example for a patch:
             # num_corners corner1_y corner_1_x corner1_z corner2_y corner2_x ... etc.
             patch_strings.append('{} {}'.format(number_of_corners, ' '.join('{} {} {}'.format(
-                p[0, 1]*scaling, p[0, 0]*scaling, patch.z) for p in corners)))
+                p[0, 0]*scaling, p[0, 1]*scaling, patch.z) for p in reversed(corners))))
         # Pass back a string with the electrode name followed by the number of patches on the first line,
         # and then a line for each patch as detailed in the loop over the patches.
         return s + '\n'.join(patch_strings)
@@ -244,7 +244,7 @@ def main():
 
     # The tspan elements in the svg are all text elements and the only text elements in the svg file are the
     # names of the electrodes.
-    electrode_names = set([text_element.text for text_element in root.iterfind('.//tspan')])
+    electrode_names = sorted(set([text_element.text for text_element in root.iterfind('.//tspan')]))
     # Grab all of the coordinate information from the svg and create a list of patch objects from each of the
     # path elements.
     all_patches = [Patch(path_element, extra_output_log) for path_element in root.iterfind('.//g/path')]
