@@ -13,9 +13,9 @@ PRINT_ELECTRODES = False
 
 # Flags for logging output in data files.
 LOG_EXTRA_OUTPUT = True
-EXTRA_OUTPUT_LOG_PATH = 'dataOutput/SVGtoExtraOutput.txt'
+EXTRA_OUTPUT_LOG_PATH = 'output/SVGtoExtra.txt'
 LOG_ELECTRODES = True
-ELECTRODES_LOG_PATH = 'dataOutput/SVGtoElectrodesOutput.txt'
+ELECTRODES_LOG_PATH = 'output/SVGtoElectrodes.txt'
 
 # Create an iterator over the trap image file
 trap_XML_iterator = elementTree.iterparse('resources/RS1096.svg')
@@ -211,7 +211,7 @@ class Electrode(object):
         nearest.matched = True
         return nearest
 
-    def __repr__( self ):
+    def __repr__(self):
         # A list of the number of corners in each patch that makes up the electrode.
         corners_per_patch = [len(patch.get_corners().T) for patch in self.patches]
         # The name followed by the number of patches.
@@ -243,7 +243,7 @@ def main():
     electrode_log = open(ELECTRODES_LOG_PATH, 'w')
 
     # The tspan elements in the svg are all text elements and the only text elements in the svg file are the
-    # names of the electrodes.
+    # names of the electrodes. Sort them since using set produces randomly rearranged output files.
     electrode_names = sorted(set([text_element.text for text_element in root.iterfind('.//tspan')]))
     # Grab all of the coordinate information from the svg and create a list of patch objects from each of the
     # path elements.
